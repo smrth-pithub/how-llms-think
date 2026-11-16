@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>How LLMs Think</title>
+<link rel="stylesheet" href="/static/common.css">
+<style>
+  body { overflow: auto; }
+  .home { max-width: 1180px; margin: 0 auto; padding: 48px 32px 40px; width: 100%; }
+  .home h1 { font-size: clamp(36px, 4.4vw, 64px); line-height: 1.05; margin: 0 0 12px; letter-spacing: -.01em; }
+  .home .lede { font-size: 22px; color: var(--muted); margin: 0 0 36px; max-width: 46em; }
+  .tiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 20px; }
+  .tile { display: flex; flex-direction: column; gap: 10px; padding: 26px; text-decoration: none; color: var(--ink); min-height: 220px; }
+  .tile:hover { border-color: var(--accent); }
+  .tile .n { font-size: 15px; font-weight: 700; color: var(--accent); letter-spacing: .04em; text-transform: uppercase; }
+  .tile h2 { margin: 0; font-size: 30px; line-height: 1.15; }
+  .tile p { margin: 0; color: var(--muted); font-size: 18px; }
+  .tile .status { margin-top: auto; }
+  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-top: 20px; }
+  .small-tile { padding: 20px 26px; text-decoration: none; color: var(--ink); display: block; }
+  .small-tile h3 { margin: 0 0 4px; font-size: 22px; }
+  .small-tile p { margin: 0; color: var(--muted); }
+  .keys-help { margin-top: 28px; color: var(--muted); font-size: 16px; line-height: 1.9; }
+  @media (max-width: 860px) { .tiles, .row2 { grid-template-columns: 1fr; } }
+</style>
+</head>
+<body>
+<div class="home">
+  <h1>How LLMs Think</h1>
+  <p class="lede">Watch a small model guess what you're doing, then watch a language model guess the next word.
+    Same steps: numbers in, a score for every option, softmax, pick from the top.</p>
+  <div class="tiles">
+    <a class="tile card" href="/gesture">
+      <span class="n">Segments 1–2</span>
+      <h2>Gesture demo</h2>
+      <p>Webcam → body points → small neural net → seven ranked guesses, with the temperature slider.</p>
+      <span class="status pill" id="gStatus">checking…</span>
+    </a>
+    <a class="tile card" href="/tokenizer">
+      <span class="n">Segment 3</span>
+      <h2>Tokenizer</h2>
+      <p>See how the model chops text like "unbelievable" into pieces before it reads it.</p>
+      <span class="status pill" id="tStatus">Qwen3 tokenizer</span>
+    </a>
+    <a class="tile card" href="/llm">
+      <span class="n">Segment 3</span>
+      <h2>Next-token viewer</h2>
+      <p>Type a sentence, see the top-10 next tokens live, then let it write one token at a time.</p>
+      <span class="status pill" id="lStatus">checking…</span>
+    </a>
+  </div>
+  <div class="row2">
+    <a class="small-tile card" href="/record">
+      <h3>Record &amp; train</h3>
+      <p>Record club members doing each gesture, then train the model (takes 1–3 minutes).</p>
+    </a>
+    <div class="small-tile card">
+      <h3>One demo at a time</h3>
+      <p>Opening the camera unloads the language model to save memory; opening a text page loads it again (about 10 s).</p>
+    </div>
+  </div>
+  <div class="keys-help">
+    Keys on every page: <kbd>F</kbd> fullscreen · <kbd>H</kbd> hide the top bar · <kbd>D</kbd> dark / light.<br>
+    Gesture demo: <kbd>Space</kbd> sample a guess · <kbd>←</kbd> <kbd>→</kbd> temperature · <kbd>1</kbd> reset to 1.0 · <kbd>N</kbd> show the numbers · <kbd>M</kbd> mirror.<br>
+    Next-token viewer: <kbd>Enter</kbd> pick the next token · <kbd>Shift</kbd>+<kbd>Enter</kbd> new line · <kbd>Esc</kbd> stop auto-writing.
+  </div>
+</div>
+<script src="/static/common.js"></script>
+<script>
+  topbar("/");
+  fetch("/api/gesture/info").then(r => r.json()).then(d => {
+    const el = document.getElementById("gStatus");
+    const r = d.model && d.model.report;
+    if (!d.model.trained) { el.textContent = "No model yet: record & train first"; el.classList.add("err"); }
+    else { el.textContent = r && r.people ? `Model trained on ${r.people.length} people` : "Model ready"; el.classList.add("ok"); }
+  });
+  fetch("/api/llm/status").then(r => r.json()).then(d => {
+    const el = document.getElementById("lStatus");
+    const have = d.models.filter(m => m.available).map(m => m.name);
+    el.textContent = have.length ? `${have.join(" + ")} on disk${d.state === "ready" ? " · loaded" : ""}` : "No model files found";
+    el.classList.add(have.length ? "ok" : "err");
+  });
+</script>
+</body>
+</html>

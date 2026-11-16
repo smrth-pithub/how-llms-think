@@ -1,0 +1,11 @@
+# Exact versions the demo was built and tested with (Python 3.11-3.14, Windows).
+mediapipe==1.2.3
+opencv-contrib-python==5.0.0.93
+numpy==2.5.4
+fastapi==0.163.1
+pydantic==2.14.3
+uvicorn==0.54.0
+websockets==17.4
+httpx==0.28.1
+# only needed to train the gesture model (Record & train page)
+torch==2.15.0

@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Tokenizer</title>
+<link rel="stylesheet" href="/static/common.css">
+<style>
+  body { overflow: auto; }
+  .t-main { width: 100%; max-width: 1400px; margin: 0 auto; padding: 36px 32px; display: flex; flex-direction: column; gap: 22px; }
+  .t-main h1 { margin: 0; font-size: clamp(30px, 3.4vw, 52px); line-height: 1.1; }
+  .t-main .lede { margin: 0; font-size: 22px; color: var(--muted); }
+  .t-input { width: 100%; font-size: clamp(32px, 4vw, 64px); font-weight: 600; padding: 14px 22px; border-radius: 14px; border: 2px solid var(--line); background: var(--panel); }
+  .t-input:focus { outline: none; border-color: var(--accent); }
+  .presets { display: flex; flex-wrap: wrap; gap: 8px; }
+  .t-chips { font-size: clamp(30px, 3.8vw, 60px); min-height: 1.6em; gap: 10px 8px; }
+  .t-chips .chip { padding: 6px 12px 4px; border-radius: 10px; }
+  .t-chips .chip .id { font-size: 15px; font-weight: 600; }
+  .t-stats { font-size: 24px; }
+  .t-stats b { color: var(--accent); font-size: 1.3em; }
+  .t-note { font-size: 17px; color: var(--muted); max-width: 60em; }
+  .status { font-size: 16px; }
+</style>
+</head>
+<body>
+<main class="t-main">
+  <h1>How a model reads text</h1>
+  <p class="lede">Before the model sees anything, a tokenizer chops the text into pieces it knows. Each piece is just a number.</p>
+  <input class="t-input" id="text" value="unbelievable" spellcheck="false" autocomplete="off" aria-label="Text to tokenize">
+  <div class="presets" id="presets"></div>
+  <div class="chips t-chips" id="chips"></div>
+  <div class="t-stats" id="stats"></div>
+  <div class="t-note" id="note"></div>
+  <div class="status muted" id="status"></div>
+</main>
+<script src="/static/common.js"></script>
+<script>
+topbar("/tokenizer");
+const $ = id => document.getElementById(id);
+const PRESETS = ["unbelievable", "tokenization", "The cat sat on the mat", "BITS Pilani", "Claude Builder Club",
+                 "ChatGPT", "antidisestablishmentarianism", "1234567890", "नमस्ते", "🙂🎉"];
+$("presets").innerHTML = PRESETS.map(p => `<button class="btn small">${p}</button>`).join("");
+$("presets").addEventListener("click", e => { if (e.target.tagName === "BUTTON") { $("text").value = e.target.textContent; run(); } });
+
+function pieceNode(t) {
+  const chip = document.createElement("span");
+  chip.className = "chip";
+  const txt = document.createElement("span");
+  if (Array.isArray(t.piece)) {                       // part of a character: raw bytes
+    chip.classList.add("bytes");
+    txt.textContent = t.piece.map(b => b.toString(16).padStart(2, "0")).join(" ");
+  } else txt.appendChild(showToken(t.piece));
+  const id = document.createElement("span"); id.className = "id"; id.textContent = t.id;
+  chip.append(txt, id);
+  return chip;
+}
+
+let seq = 0, timer;
+async function run() {
+  const text = $("text").value;
+  const my = ++seq;
+  if (!text) { $("chips").innerHTML = ""; $("stats").textContent = ""; $("note").textContent = ""; return; }
+  try {
+    const d = await postJSON("/api/llm/tokenize", { text });
+    if (my !== seq) return;
+    $("chips").replaceChildren(...d.tokens.map(pieceNode));
+    const chars = [...text].length, n = d.tokens.length;
+    $("stats").innerHTML = `${chars} characters → <b>${n}</b> token${n === 1 ? "" : "s"}`;
+    const hasBytes = d.tokens.some(t => Array.isArray(t.piece));
+    $("note").textContent = (text.includes(" ") ? "A · means a space: most tokens carry the space in front of the word. " : "") +
+      (hasBytes ? "Pieces in italics are raw bytes: the tokenizer split a single character, because it saw this script less often while it was built." : "");
+    $("status").textContent = "";
+  } catch (e) {
+    $("status").textContent = e.status === 503 ? "Loading the model… (about 10 s)" : "Tokenizer error: " + e.message;
+    if (e.status === 503) setTimeout(run, 1500);
+  }
+}
+$("text").addEventListener("input", () => { clearTimeout(timer); timer = setTimeout(run, 80); });
+$("status").textContent = "Loading the model… (about 10 s)";
+postJSON("/api/llm/load", {}).then(s => {
+  if (s.state === "error") $("status").textContent = "Could not load the model: " + s.error;
+  run();
+}).catch(e => $("status").textContent = "Could not load the model: " + e.message);
+</script>
+</body>
+</html>

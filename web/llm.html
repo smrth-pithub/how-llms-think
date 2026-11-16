@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Next-Token Viewer</title>
+<link rel="stylesheet" href="/static/common.css">
+<style>
+  .l-main { flex: 1; min-height: 0; display: flex; flex-direction: column; gap: 8px; padding: 14px 26px 4px; }
+  .l-head { display: flex; gap: 10px; align-items: center; font-size: 15px; flex-wrap: wrap; }
+  .l-head select { padding: 5px 8px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); font-size: 15px; max-width: 22em; }
+  .l-head .spacer { flex: 1; }
+  .lat { font-family: var(--mono); }
+  .lat.slow { color: var(--warn); font-weight: 700; }
+
+  /* text box with the model's own words highlighted behind it */
+  .editor { position: relative; flex: none; height: clamp(84px, 15vh, 200px); border: 2px solid var(--line); border-radius: 14px; background: var(--panel); overflow: hidden; }
+  .editor:focus-within { border-color: var(--accent); }
+  .editor textarea, .editor .backdrop {
+    position: absolute; inset: 0; margin: 0; padding: 10px 18px; border: 0;
+    font-family: var(--font); font-size: clamp(22px, 2.3vw, 42px); line-height: 1.3; font-weight: 500;
+    white-space: pre-wrap; overflow-wrap: break-word; overflow-y: auto; letter-spacing: normal;
+    scrollbar-width: none;   /* a scrollbar on only one layer would shift the line breaks */
+  }
+  .editor textarea { background: transparent; resize: none; outline: none; z-index: 1; caret-color: var(--accent); }
+  .editor .backdrop { color: transparent; pointer-events: none; z-index: 0; scrollbar-width: none; }
+  .editor .backdrop mark { color: transparent; background: var(--accent-soft); border-radius: 4px; }
+  .editor .backdrop mark.last { background: color-mix(in srgb, var(--accent) 35%, transparent); }
+
+  .tokline { display: flex; gap: 10px; align-items: center; min-height: 26px; }
+  .tokline .chips { font-size: 14px; gap: 3px; flex: 1; height: 24px; overflow: hidden; flex-wrap: nowrap; justify-content: flex-end; }
+  .tokline .chips .chip { padding: 1px 4px; flex: none; }
+  .tokline .count { font-size: 14px; color: var(--muted); white-space: nowrap; }
+
+  .l-body { flex: 1; min-height: 0; display: flex; flex-direction: column; }
+  .l-body h2 { margin: 0; font-size: clamp(20px, 1.9vw, 30px); white-space: nowrap; }
+  .picked { font-size: clamp(15px, 1.3vw, 20px); color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+  .picked b { color: var(--accent); font-family: var(--mono); }
+  .l-body .bars { flex: 1; min-height: 200px; margin-top: 4px; --label-w: 9em; --pct-w: 3.4em; }
+  .l-body .bars .bar-label { font-family: var(--mono); font-weight: 600; }
+  .foot { font-size: 13px; color: var(--muted); }
+  .overlay { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; background: color-mix(in srgb, var(--bg) 80%, transparent); font-size: 26px; font-weight: 600; z-index: 5; text-align: center; padding: 30px; }
+
+  .l-controls { flex: none; display: grid; grid-template-columns: 1fr auto auto auto; gap: 14px; align-items: center; padding: 6px 26px 12px; }
+  .l-controls .btn { font-size: 19px; padding: 12px 18px; }
+  @media (max-width: 1000px) { body { overflow: auto; } .l-controls { grid-template-columns: 1fr 1fr; } .l-controls .temp { grid-column: 1 / -1; } }
+</style>
+</head>
+<body>
+<main class="l-main">
+  <div class="editor">
+    <div class="backdrop" id="backdrop" aria-hidden="true"></div>
+    <textarea id="text" spellcheck="false" aria-label="Text so far">The cat sat on the</textarea>
+  </div>
+  <div class="tokline"><span class="count" id="count"></span><div class="chips" id="chips"></div></div>
+  <section class="l-body" style="position:relative">
+    <div class="l-head">
+      <h2>What comes next?</h2>
+      <span class="picked" id="picked"></span>
+      <span class="spacer"></span>
+      <select id="preset" aria-label="Example prompts"></select>
+      <select id="model" aria-label="Model" title="Model ladder: switch down if it lags"></select>
+      <span class="pill lat" id="lat" title="Time for one prediction. Over 500 ms: switch to the smaller model.">–</span>
+    </div>
+    <div class="bars" id="bars"></div>
+    <div class="foot" id="foot">Percentages among the model's top 100 guesses · click a guess to add it · <kbd>Ctrl</kbd>+<kbd>Enter</kbd> auto-write · <kbd>Esc</kbd> stop</div>
+    <div class="overlay hidden" id="overlay"></div>
+  </section>
+</main>
+<footer class="l-controls">
+  <div class="temp" id="temp"></div>
+  <button class="btn primary" id="pickBtn">Pick next <kbd>Enter</kbd></button>
+  <button class="btn" id="autoBtn">Auto-write ▶</button>
+  <button class="btn" id="undoBtn">Undo</button>
+</footer>
+<script src="/static/common.js"></script>
+<script src="/static/llm.js"></script>
+</body>
+</html>
