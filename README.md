@@ -39,11 +39,21 @@ once more as a slightly different "person": a bit faster or slower, camera tilte
 arms up to 12% longer or shorter. That helps the model cope with people it hasn't seen.
 (`python -m app.train --augment 0` turns this off, if you want to compare.)
 
-**Why not a public dataset?** None has these 7 gestures filmed like this. The closest,
-NTU RGB+D, covers waving, clapping, jumping and roughly hands up, but needs an approved
-research account and converting from Kinect skeletons, and still lacks thumbs up (in the
-basic version), standing still and folded arms. Recording 6 people takes about 15 minutes,
-and "we collected our own data" is part of the Segment 5 story.
+**What about a public dataset?** We tried [MPOSE2021](https://zenodo.org/records/5507363)
+(CC BY 4.0, Mazzia et al. 2021): one-second body-point clips of 100 people, covering 5 of our
+7 gestures. With 4 club members recorded, adding it scored slightly *worse* on unseen club
+members (82.6% vs 84.1%), because its lab cameras film people differently from our webcam.
+So it's off by default. To try it yourself:
+
+```
+.venv\Scripts\python -m tools.import_mpose          (downloads ~90 MB, once)
+.venv\Scripts\python -m app.train --with-mpose
+```
+
+Its "scratch-head" clips are never trained on; every training run reports what the model
+says for them (a head-scratch test). They're filmed full-body in labs, so still try a real
+head-scratch on your own webcam. Recording your own people takes about 15 minutes, and
+"we collected our own data" is part of the Segment 5 story.
 
 ## Before the session (in the room)
 

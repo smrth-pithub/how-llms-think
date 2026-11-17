@@ -4,6 +4,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 DATA_DIR = ROOT / "data"            # one folder per person, one .npz per recorded gesture
+EXTRA_DIR = ROOT / "data_extra"     # public extra training data (MPOSE2021), see tools/import_mpose.py
 MODELS_DIR = ROOT / "models"        # Qwen GGUFs, MediaPipe pose model, trained gesture model
 WEB_DIR = ROOT / "web"
 LLAMA_DIR = ROOT / "tools" / "llama"

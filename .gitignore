@@ -15,5 +15,8 @@ data/
 data_*/
 models/gesture_model.*
 
+# Downloaded datasets (tools/import_mpose.py)
+downloads/
+
 # Logs
 logs/

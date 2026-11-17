@@ -23,16 +23,22 @@ def log(*a):
     print(*a, flush=True)
 
 
-def load_recordings(data_dir: Path):
+EXTRA_PREFIX = "mpose:"     # people from the public MPOSE2021 dataset (always in training, never tested)
+
+
+def load_recordings(data_dir: Path, prefix="", trim=0.5, keys=None):
+    """trim = seconds skipped at the start of each clip (people getting into position).
+    MPOSE2021 clips are already cut to the action, so they use 0."""
+    keys = set(keys or C.GESTURE_KEYS)
     recs = []
     for f in sorted(data_dir.glob("*/*.npz")):
         try:
             d = np.load(f, allow_pickle=False)
             g = str(d["gesture"])
-            if g not in C.GESTURE_KEYS:
+            if g not in keys:
                 continue
-            recs.append(dict(person=f.parent.name, gesture=g, frames=d["frames"], times=d["times"],
-                             aspect=float(d["width"]) / float(d["height"]), file=f.name))
+            recs.append(dict(person=prefix + f.parent.name, gesture=g, frames=d["frames"], times=d["times"],
+                             aspect=float(d["width"]) / float(d["height"]), file=f.name, trim=trim))
         except Exception as e:
             log(f"  skipping {f}: {e}")
     return recs
@@ -56,7 +62,7 @@ def build(recs, use_mirror=True, n_augment=1, stride=2, seed=0):
             versions.append((f, t, f"~a{i}"))
         for frames, t, tag in versions:
             span = max(t[-1] - t[0], 1e-6)
-            for lo, hi in window_slices(t, stride=stride):
+            for lo, hi in window_slices(t, stride=stride, trim=r.get("trim", 0.5)):
                 X.append(window_features(frames[lo:hi], t[lo:hi], r["aspect"]))
                 y.append(label)
                 groups.append(r["person"] + tag)
@@ -84,7 +90,11 @@ def fit(X, y, epochs=60, seed=0):
     opt = torch.optim.AdamW(model.parameters(), lr=3e-3, weight_decay=1e-3)
     # label smoothing keeps the model from being 100% sure of everything,
     # so the temperature slider has something to show at T = 1
-    loss_fn = nn.CrossEntropyLoss(label_smoothing=0.1)
+    # class weights: gestures with fewer examples (thumbs up and hands up have no MPOSE2021 clips)
+    # count for more, so the model doesn't just learn to avoid them
+    counts = np.bincount(y, minlength=n_cls).astype(np.float64)
+    cw = np.where(counts > 0, len(y) / (n_cls * np.maximum(counts, 1)), 0.0).clip(0, 5)
+    loss_fn = nn.CrossEntropyLoss(weight=torch.tensor(cw, dtype=torch.float32), label_smoothing=0.1)
     gen = torch.Generator().manual_seed(seed)
     for _ in range(epochs):
         model.train()
@@ -111,6 +121,33 @@ def predict(weights, mean, std, X):
     return x.argmax(1)
 
 
+def headscratch_check(weights, mean, std):
+    """Segment 1's moment, tested: MPOSE2021 clips of people scratching their head (never trained on).
+    The model has no 'nothing' option, so what does it say?"""
+    recs = load_recordings(C.EXTRA_DIR / "headscratch", prefix=EXTRA_PREFIX, trim=0.0, keys=["scratch_head"])
+    if not recs:
+        return None
+    feats = [window_features(r["frames"][lo:hi], r["times"][lo:hi], r["aspect"])
+             for r in recs for lo, hi in window_slices(r["times"], stride=2, trim=0.0)]
+    if not feats:
+        return None
+    x = (np.asarray(feats, np.float32) - mean) / std
+    for i, (W, b) in enumerate(weights):
+        x = x @ W + b
+        if i < len(weights) - 1:
+            x = np.maximum(x, 0)
+    p = np.exp(x - x.max(1, keepdims=True))
+    p /= p.sum(1, keepdims=True)
+    top = p.argmax(1)
+    share = {C.GESTURE_LABELS[k]: round(100 * float((top == k).mean()), 1) for k in range(len(C.GESTURE_KEYS))}
+    share = dict(sorted(((k, v) for k, v in share.items() if v > 0), key=lambda kv: -kv[1]))
+    log(f"\nHead-scratch check ({len(recs)} clips of people scratching their head, never trained on):")
+    log("  the model's answer: " + ", ".join(f"{k} {v:.0f}%" for k, v in share.items()))
+    log(f"  how sure it is of its answer, on average (temperature 1.0): {100 * float(p.max(1).mean()):.0f}%")
+    log("  (these clips are full-body, filmed in labs; try a real head-scratch on your own webcam too)")
+    return dict(answers=share, mean_confidence=round(100 * float(p.max(1).mean()), 1), clips=len(recs))
+
+
 def confusion(y_true, y_pred):
     n = len(C.GESTURE_KEYS)
     m = np.zeros((n, n), int)
@@ -133,6 +170,9 @@ def main(argv=None):
     ap.add_argument("--data", default=str(C.DATA_DIR))
     ap.add_argument("--epochs", type=int, default=60)
     ap.add_argument("--no-eval", action="store_true", help="skip the held-out-person test")
+    ap.add_argument("--with-mpose", action="store_true",
+                    help="also train on the public MPOSE2021 clips (tools/import_mpose.py). Off by default: "
+                         "with 4 club members it scored 82.6%% vs 84.1%% on unseen people")
     ap.add_argument("--augment", type=int, default=1,
                     help="extra varied copies of each recording (speed, camera tilt, arm length); 0 = off")
     ap.add_argument("--out", default=str(C.GESTURE_MODEL_PATH))
@@ -141,27 +181,53 @@ def main(argv=None):
     t0 = time.time()
     data_dir = Path(args.data)
     recs = load_recordings(data_dir)
-    if not recs:
+    extra = load_recordings(C.EXTRA_DIR / "mpose", prefix=EXTRA_PREFIX, trim=0.0) if args.with_mpose else []
+    if not recs and not extra:
         log(f"No recordings found in {data_dir}. Record some on the Record page first.")
         return 1
     people = sorted({r["person"] for r in recs})
-    log(f"Loaded {len(recs)} recordings from {len(people)} people: {', '.join(people)}")
-    have = {g: sorted({r['person'] for r in recs if r['gesture'] == g}) for g in C.GESTURE_KEYS}
+    if recs:
+        log(f"Loaded {len(recs)} recordings from {len(people)} people: {', '.join(people)}")
+    else:
+        log("No club recordings yet: training on the public MPOSE2021 clips only.")
+    extra_people = sorted({r["person"] for r in extra})
+    if extra:
+        log(f"Plus {len(extra)} MPOSE2021 clips from {len(extra_people)} more people "
+            f"(CC BY 4.0, Mazzia et al. 2021): always used for training, never for the test below")
+    elif args.with_mpose:
+        log("(No MPOSE2021 extra data found; run: .venv\\Scripts\\python -m tools.import_mpose)")
+    have = {g: sorted({r['person'] for r in recs + extra if r['gesture'] == g}) for g in C.GESTURE_KEYS}
     missing = [C.GESTURE_LABELS[i] for i, g in enumerate(C.GESTURE_KEYS) if not have[g]]
     if missing:
         log(f"WARNING: no recordings at all for: {', '.join(missing)}. The model can never predict these well.")
 
-    X, y, groups, tfrac = build(recs, n_augment=args.augment)
+    X, y, groups, tfrac = build(recs + extra, n_augment=args.augment)
     base = np.array([g.split("~")[0] for g in groups])
+    is_extra = np.array([g.startswith(EXTRA_PREFIX) for g in groups])
+    unmirrored = np.array(["~" not in g for g in groups])
     log(f"Each recording used as-is, mirrored, and {args.augment} more time(s) with a different speed, "
         f"camera tilt and arm length")
     log(f"{len(X)} training windows ({X.shape[1]} numbers each), "
         + ", ".join(f"{C.GESTURE_LABELS[i]} {int((y == i).sum())}" for i in range(len(C.GESTURE_KEYS))))
 
     report = dict(people=people, n_windows=int(len(X)), n_features=int(X.shape[1]), augment=args.augment,
+                  extra=dict(source="MPOSE2021", clips=len(extra), people=len(extra_people)) if extra else None,
                   trained_at=time.strftime("%Y-%m-%d %H:%M"), heldout=None)
 
-    if not args.no_eval:
+    if not args.no_eval and not people:
+        # no club recordings: test on MPOSE2021 people held out from training (5 gestures only)
+        rng = np.random.default_rng(0)
+        held = set(rng.choice(extra_people, size=max(1, len(extra_people) // 5), replace=False).tolist())
+        te = np.isin(base, list(held)) & unmirrored
+        tr = ~np.isin(base, list(held))
+        log(f"\nTest on {len(held)} MPOSE2021 people the model never saw (only the 5 gestures they did):")
+        w, mu, sd = fit(X[tr], y[tr], epochs=args.epochs)
+        pred = predict(w, mu, sd, X[te])
+        acc = float((pred == y[te]).mean())
+        log(f"  accuracy {100 * acc:.1f}%  ({te.sum()} windows)\n")
+        print_confusion(confusion(y[te], pred))
+        report["heldout"] = dict(kind="unseen MPOSE2021 people", overall=round(100 * acc, 1))
+    elif not args.no_eval:
         if len(people) >= 2:
             log("\nTest on people the model never saw (train on everyone else, test on them):")
             all_t, all_p, per = [], [], {}
@@ -184,8 +250,8 @@ def main(argv=None):
         else:
             log("\nOnly one person recorded, so we can't test on an unseen person yet.")
             log("Testing on the last 30% of each recording instead (easier than a new person):")
-            unmirrored = np.array(["~" not in g for g in groups])
-            tr, te = tfrac < 0.7, (tfrac >= 0.7) & unmirrored
+            tr = (tfrac < 0.7) | is_extra
+            te = (tfrac >= 0.7) & unmirrored & ~is_extra
             w, mu, sd = fit(X[tr], y[tr], epochs=args.epochs)
             pred = predict(w, mu, sd, X[te])
             acc = float((pred == y[te]).mean())
@@ -202,6 +268,7 @@ def main(argv=None):
     for i, (W, b) in enumerate(w):
         arrays[f"W{i}"] = W.astype(np.float32)
         arrays[f"b{i}"] = b.astype(np.float32)
+    report["headscratch"] = headscratch_check(w, mu, sd)
     tmp = out.with_name(out.stem + ".tmp.npz")
     np.savez(tmp, **arrays)
     tmp.replace(out)
