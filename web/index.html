@@ -73,7 +73,10 @@
     const el = document.getElementById("gStatus");
     const r = d.model && d.model.report;
     if (!d.model.trained) { el.textContent = "No model yet: record & train first"; el.classList.add("err"); }
-    else { el.textContent = r && r.people ? `Model trained on ${r.people.length} people` : "Model ready"; el.classList.add("ok"); }
+    else {
+      el.textContent = r && r.people ? `Model trained on ${r.people.length} people` + (r.extra && r.extra.people ? ` + ${r.extra.people} from MPOSE2021` : "") : "Model ready";
+      el.classList.add("ok");
+    }
   });
   fetch("/api/llm/status").then(r => r.json()).then(d => {
     const el = document.getElementById("lStatus");

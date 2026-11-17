@@ -93,6 +93,7 @@ function setModelInfo(m) {
   const r = m && m.report;
   if (!r || !r.people) { $("modelInfo").textContent = ""; return; }
   let t = `Trained on ${r.people.length} ${r.people.length === 1 ? "person" : "people"}`;
+  if (r.extra && r.extra.people) t += ` + ${r.extra.people} from MPOSE2021`;
   if (r.heldout && r.heldout.kind === "unseen people") t += ` · right ${r.heldout.overall.toFixed(0)}% of the time on people it never saw`;
   $("modelInfo").textContent = t;
 }

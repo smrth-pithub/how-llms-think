@@ -39,16 +39,14 @@ once more as a slightly different "person": a bit faster or slower, camera tilte
 arms up to 12% longer or shorter. That helps the model cope with people it hasn't seen.
 (`python -m app.train --augment 0` turns this off, if you want to compare.)
 
-**What about a public dataset?** We tried [MPOSE2021](https://zenodo.org/records/5507363)
-(CC BY 4.0, Mazzia et al. 2021): one-second body-point clips of 100 people, covering 5 of our
-7 gestures. With 4 club members recorded, adding it scored slightly *worse* on unseen club
-members (82.6% vs 84.1%), because its lab cameras film people differently from our webcam.
-So it's off by default. To try it yourself:
-
-```
-.venv\Scripts\python -m tools.import_mpose          (downloads ~90 MB, once)
-.venv\Scripts\python -m app.train --with-mpose
-```
+**Extra public data: MPOSE2021.** Training also uses [MPOSE2021](https://zenodo.org/records/5507363)
+(CC BY 4.0, Mazzia et al. 2021): one-second body-point clips of 100 more people, covering 5 of
+our 7 gestures (not thumbs up or hands up, which come only from club recordings). `setup.bat`
+downloads it (~90 MB, once), or run `.venv\Scripts\python -m tools.import_mpose`.
+With 4 club members it scored 82.6% on unseen club members, vs 84.1% for club recordings
+alone: its lab cameras film people differently from our webcam. To train without it:
+`.venv\Scripts\python -m app.train --no-mpose`. The club-only model from 17 Nov is kept as
+`models/gesture_model_club_only_backup.npz` (+ `.json`): copy both over `gesture_model.*` to go back.
 
 Its "scratch-head" clips are never trained on; every training run reports what the model
 says for them (a head-scratch test). They're filmed full-body in labs, so still try a real

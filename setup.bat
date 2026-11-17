@@ -43,6 +43,7 @@ echo Using: %PY%
 :assets
 echo.
 ".venv\Scripts\python.exe" -m tools.download_assets || goto :fail
+".venv\Scripts\python.exe" -m tools.import_mpose || goto :fail
 echo.
 echo Setup OK. Next: check_camera.bat, then start.bat
 pause

@@ -170,9 +170,9 @@ def main(argv=None):
     ap.add_argument("--data", default=str(C.DATA_DIR))
     ap.add_argument("--epochs", type=int, default=60)
     ap.add_argument("--no-eval", action="store_true", help="skip the held-out-person test")
-    ap.add_argument("--with-mpose", action="store_true",
-                    help="also train on the public MPOSE2021 clips (tools/import_mpose.py). Off by default: "
-                         "with 4 club members it scored 82.6%% vs 84.1%% on unseen people")
+    ap.add_argument("--no-mpose", action="store_true",
+                    help="train on the club's recordings only, without the public MPOSE2021 clips "
+                         "(with 4 club members: 84.1%% on unseen people, vs 82.6%% with MPOSE2021)")
     ap.add_argument("--augment", type=int, default=1,
                     help="extra varied copies of each recording (speed, camera tilt, arm length); 0 = off")
     ap.add_argument("--out", default=str(C.GESTURE_MODEL_PATH))
@@ -181,7 +181,7 @@ def main(argv=None):
     t0 = time.time()
     data_dir = Path(args.data)
     recs = load_recordings(data_dir)
-    extra = load_recordings(C.EXTRA_DIR / "mpose", prefix=EXTRA_PREFIX, trim=0.0) if args.with_mpose else []
+    extra = [] if args.no_mpose else load_recordings(C.EXTRA_DIR / "mpose", prefix=EXTRA_PREFIX, trim=0.0)
     if not recs and not extra:
         log(f"No recordings found in {data_dir}. Record some on the Record page first.")
         return 1
@@ -194,7 +194,7 @@ def main(argv=None):
     if extra:
         log(f"Plus {len(extra)} MPOSE2021 clips from {len(extra_people)} more people "
             f"(CC BY 4.0, Mazzia et al. 2021): always used for training, never for the test below")
-    elif args.with_mpose:
+    elif not args.no_mpose:
         log("(No MPOSE2021 extra data found; run: .venv\\Scripts\\python -m tools.import_mpose)")
     have = {g: sorted({r['person'] for r in recs + extra if r['gesture'] == g}) for g in C.GESTURE_KEYS}
     missing = [C.GESTURE_LABELS[i] for i, g in enumerate(C.GESTURE_KEYS) if not have[g]]

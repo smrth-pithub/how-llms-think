@@ -13,7 +13,7 @@ tools/llama/
 # People's recordings and the model trained on them (has their names): keep these local
 data/
 data_*/
-models/gesture_model.*
+models/gesture_model*
 
 # Downloaded datasets (tools/import_mpose.py)
 downloads/
